@@ -620,7 +620,18 @@ export default function Scene({
 }) {
   return (
     <div className="absolute inset-0 w-full h-full z-0 pointer-events-auto bg-[#020205]">
-      <Canvas camera={{ position: [0, 0, 12], fov: 45 }} gl={{ alpha: true, antialias: false, powerPreference: "high-performance", stencil: false, depth: true }}>
+      <Canvas 
+        camera={{ position: [0, 0, 12], fov: 45 }} 
+        gl={{ 
+          alpha: true, 
+          antialias: false, 
+          powerPreference: "low-power", // Forces Intel Iris Xe (iGPU) instead of waking up dGPU
+          stencil: false, 
+          depth: true,
+          precision: "lowp" // Drastically reduces memory bandwidth usage on thin/light laptops
+        }}
+        dpr={typeof window !== 'undefined' ? Math.min(window.devicePixelRatio, 1.5) : 1} // Limit pixel ratio to 1.5x max
+      >
         <color attach="background" args={['#020205']} />
         <React.Suspense fallback={null}>
           <ambientLight intensity={0.4} />
