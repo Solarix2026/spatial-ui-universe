@@ -5,9 +5,9 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Environment, Sparkles, Stars, Sphere, MeshDistortMaterial, Clouds, Cloud } from "@react-three/drei";
 import * as THREE from "three";
 
-// Supernova Easter Egg Component
+// Supernova Easter Egg Component - OPTIMIZED for performance
 function SupernovaEasterEgg({ active, color, onComplete }: { active: boolean, color: string, onComplete: () => void }) {
-  const count = 75; // Even less particles, but thicker bridging
+  const count = 40; // Reduced from 75 for better performance
   const meshRef = useRef<THREE.InstancedMesh>(null);
   
   const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -20,7 +20,7 @@ function SupernovaEasterEgg({ active, color, onComplete }: { active: boolean, co
             (Math.random() - 0.5) * 2,
             (Math.random() - 0.5) * 2,
             (Math.random() - 0.5) * 2
-        ).normalize().multiplyScalar(1.5); // Start exactly on the Coreradius
+        ).normalize().multiplyScalar(1.5);
         pts.push(p);
     }
     return pts;
@@ -170,7 +170,7 @@ function SupernovaEasterEgg({ active, color, onComplete }: { active: boolean, co
   return (
     <group>
       <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
-        <sphereGeometry args={[0.5, 32, 32]} />
+        <sphereGeometry args={[0.5, 16, 16]} />
         <meshStandardMaterial 
             color="#0ea5e9"
             emissive="#0369a1" 
@@ -183,7 +183,7 @@ function SupernovaEasterEgg({ active, color, onComplete }: { active: boolean, co
         />
       </instancedMesh>
       <instancedMesh ref={bondsMeshRef} args={[undefined, undefined, maxBonds]} frustumCulled={false}>
-        <sphereGeometry args={[1, 32, 32]} />
+        <cylinderGeometry args={[0.05, 0.05, 1, 8]} />
         <meshStandardMaterial 
             color="#38bdf8" 
             transparent 
@@ -195,7 +195,7 @@ function SupernovaEasterEgg({ active, color, onComplete }: { active: boolean, co
             blending={THREE.NormalBlending}
         />
       </instancedMesh>
-      <Sphere ref={centralBlobRef} args={[1.0, 64, 64]} scale={0}>
+      <Sphere ref={centralBlobRef} args={[1.0, 32, 32]} scale={0}>
         <MeshDistortMaterial 
             color="#0ea5e9"
             emissive="#0369a1" 
@@ -277,8 +277,8 @@ export function BlackHoleCore({ color = "#312e81" }: { color?: string }) {
       <SupernovaEasterEgg active={easterEggActive} color={color} onComplete={() => setEasterEggActive(false)} />
       
       <group ref={visualsGroupRef}>
-        <Sphere args={[1.5, 64, 64]}>
-          <MeshDistortMaterial color={color} emissive={color} emissiveIntensity={0.5} distort={0.4} speed={3} roughness={0.1} metalness={0.8} envMapIntensity={2.0} />
+        <Sphere args={[1.5, 32, 32]}>
+          <MeshDistortMaterial color={color} emissive={color} emissiveIntensity={0.5} distort={0.3} speed={2} roughness={0.1} metalness={0.8} envMapIntensity={1.5} />
         </Sphere>
         
         <mesh ref={shockwaveRef} rotation={[Math.PI / 2, 0, 0]}>
@@ -340,13 +340,16 @@ export function AsteroidField({ count = 150, color = "#6366f1", shape = "dodecah
     }));
   }, [warpLinesCount]);
 
+  // Pre-allocate vectors to avoid GC pressure during useFrame
+  const mouse3D = useMemo(() => new THREE.Vector3(), []);
+  const pushDir = useMemo(() => new THREE.Vector3(), []);
+
   useFrame((state, delta) => {
     // Warp speed smooth logic
     const targetWarp = isPressing ? 1 : 0;
     warpSpeedRef.current += (targetWarp - warpSpeedRef.current) * 0.05;
     
-    const mouse3D = new THREE.Vector3(state.pointer.x * 12, state.pointer.y * 12, 2);
-    const pushDir = new THREE.Vector3();
+    mouse3D.set(state.pointer.x * 12, state.pointer.y * 12, 2);
 
     // 1. Update Asteroids (Rocks) -> No stretching anymore! 
     if (meshRef.current) {
@@ -502,6 +505,12 @@ export function NebulaClouds() {
     return new THREE.CanvasTexture(canvas);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (particleTexture) particleTexture.dispose();
+    };
+  }, [particleTexture]);
+
   const count = 400;
   
   // Use useMemo to generate organic nebula shapes (Perlin/Simplex noise-like clusters)
@@ -599,7 +608,7 @@ export function NebulaClouds() {
 export default function Scene({ 
   coreColor = "#312e81", 
   particleColor = "#6366f1", 
-  particleCount = 150, 
+  particleCount = 100, 
   particleShape = "dodecahedron",
   children
 }: { 
@@ -611,12 +620,12 @@ export default function Scene({
 }) {
   return (
     <div className="absolute inset-0 w-full h-full z-0 pointer-events-auto bg-[#020205]">
-      <Canvas camera={{ position: [0, 0, 12], fov: 45 }} gl={{ alpha: true }}>
+      <Canvas camera={{ position: [0, 0, 12], fov: 45 }} gl={{ alpha: true, antialias: false, powerPreference: "high-performance", stencil: false, depth: true }}>
         <color attach="background" args={['#020205']} />
         <React.Suspense fallback={null}>
-          <ambientLight intensity={0.5} />
-          <directionalLight position={[10, 10, 5]} intensity={3} color="#818cf8" />
-          <directionalLight position={[-10, -10, -5]} intensity={2} color="#c084fc" />
+          <ambientLight intensity={0.4} />
+          <directionalLight position={[10, 10, 5]} intensity={2.5} color="#818cf8" />
+          <directionalLight position={[-10, -10, -5]} intensity={1.5} color="#c084fc" />
           
           <CameraController />
           <BlackHoleCore color={coreColor} />
@@ -626,11 +635,10 @@ export default function Scene({
           {/* Render User's Custom 3D/4D Models Here */}
           {children}
           
-          {/* Dense Universe Stars & Sparkles */}
-          <Stars radius={150} depth={100} count={8000} factor={6} saturation={1} fade speed={2} />
-          <Sparkles count={300} scale={25} size={3} speed={0.2} opacity={0.4} color="#818cf8" />
-          <Sparkles count={200} scale={20} size={1} speed={0.4} opacity={0.6} color="#c084fc" />
-          <Sparkles count={100} scale={30} size={6} speed={0.1} opacity={0.2} color="#2dd4bf" />
+          {/* Dense Universe Stars & Sparkles - OPTIMIZED */}
+          <Stars radius={150} depth={100} count={4000} factor={6} saturation={1} fade speed={2} />
+          <Sparkles count={150} scale={25} size={3} speed={0.2} opacity={0.3} color="#818cf8" />
+          <Sparkles count={100} scale={20} size={1} speed={0.4} opacity={0.4} color="#c084fc" />
           
           <Environment preset="city" />
         </React.Suspense>
